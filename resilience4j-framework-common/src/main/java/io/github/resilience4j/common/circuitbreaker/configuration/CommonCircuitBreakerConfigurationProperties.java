@@ -16,6 +16,7 @@
 package io.github.resilience4j.common.circuitbreaker.configuration;
 
 
+import io.github.resilience4j.circuitbreaker.CircuitBreaker.State;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig.Builder;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig.SlidingWindowType;
@@ -52,23 +53,57 @@ public class CommonCircuitBreakerConfigurationProperties extends CommonPropertie
     }
 
     public CircuitBreakerConfig createCircuitBreakerConfig(String instanceName,
-        @Nullable InstanceProperties instanceProperties,
-        CompositeCustomizer<CircuitBreakerConfigCustomizer> customizer) {
+             @Nullable InstanceProperties instanceProperties,
+             CompositeCustomizer<CircuitBreakerConfigCustomizer> customizer) {
+
         CircuitBreakerConfig baseConfig = null;
         if (instanceProperties != null && StringUtils.isNotEmpty(instanceProperties.getBaseConfig())) {
-            InstanceProperties baseProperties = configs.get(instanceProperties.getBaseConfig());
-            if (baseProperties == null) {
-                throw new ConfigurationNotFoundException(instanceProperties.getBaseConfig());
-            }
-            ConfigUtils.mergePropertiesIfAny(instanceProperties, baseProperties);
-            baseConfig = createCircuitBreakerConfig(instanceProperties.getBaseConfig(), baseProperties, customizer);
-        } else if (!instanceName.equals(DEFAULT) && configs.get(DEFAULT) != null) {
-            if (instanceProperties != null) {
-                ConfigUtils.mergePropertiesIfAny(instanceProperties, configs.get(DEFAULT));
-            }
-            baseConfig = createCircuitBreakerConfig(DEFAULT, configs.get(DEFAULT), customizer);
+            baseConfig = createBaseConfig(instanceName, instanceProperties, customizer);
+        } else if (configs.get(instanceName) != null) {
+            baseConfig = createDirectConfig(instanceName, instanceProperties, customizer);
+        } else if (configs.get(DEFAULT) != null) {
+            baseConfig = createDefaultConfig(instanceProperties, customizer);
         }
+
         return buildConfig(baseConfig != null ? from(baseConfig) : custom(), instanceProperties, customizer, instanceName);
+    }
+
+    private CircuitBreakerConfig createBaseConfig(String instanceName,
+            InstanceProperties instanceProperties,
+            CompositeCustomizer<CircuitBreakerConfigCustomizer> customizer) {
+
+        String baseConfigName = instanceProperties.getBaseConfig();
+        if (instanceName.equals(baseConfigName)) {
+            throw new IllegalStateException("Circular reference detected in instance config: " + instanceName);
+        }
+
+        InstanceProperties baseProperties = configs.get(baseConfigName);
+        if (baseProperties == null) {
+            throw new ConfigurationNotFoundException(baseConfigName);
+        }
+
+        ConfigUtils.mergePropertiesIfAny(instanceProperties, baseProperties);
+        return createCircuitBreakerConfig(baseConfigName, baseProperties, customizer);
+    }
+
+    private CircuitBreakerConfig createDirectConfig(String instanceName,
+            @Nullable InstanceProperties instanceProperties,
+            CompositeCustomizer<CircuitBreakerConfigCustomizer> customizer) {
+
+        if (instanceProperties != null) {
+            ConfigUtils.mergePropertiesIfAny(instanceProperties, configs.get(instanceName));
+        }
+        return buildConfig(custom(), configs.get(instanceName), customizer, instanceName);
+    }
+
+    private CircuitBreakerConfig createDefaultConfig(
+            @Nullable InstanceProperties instanceProperties,
+            CompositeCustomizer<CircuitBreakerConfigCustomizer> customizer) {
+
+        if (instanceProperties != null) {
+            ConfigUtils.mergePropertiesIfAny(instanceProperties, configs.get(DEFAULT));
+        }
+        return createCircuitBreakerConfig(DEFAULT, configs.get(DEFAULT), customizer);
     }
 
     private CircuitBreakerConfig buildConfig(Builder builder, @Nullable InstanceProperties properties,
@@ -142,11 +177,16 @@ public class CommonCircuitBreakerConfigurationProperties extends CommonPropertie
             if (properties.ignoreExceptionPredicate != null) {
                 buildIgnoreExceptionPredicate(properties, builder);
             }
-
+            
             if (properties.automaticTransitionFromOpenToHalfOpenEnabled != null) {
                 builder.automaticTransitionFromOpenToHalfOpenEnabled(
                     properties.automaticTransitionFromOpenToHalfOpenEnabled);
             }
+
+            if(properties.getInitialState() != null){
+                builder.initialState(properties.getInitialState());
+            }
+
         }
         compositeCircuitBreakerCustomizer.getCustomizer(instanceName).ifPresent(
             circuitBreakerConfigCustomizer -> circuitBreakerConfigCustomizer.customize(builder));
@@ -290,6 +330,9 @@ public class CommonCircuitBreakerConfigurationProperties extends CommonPropertie
         private Boolean automaticTransitionFromOpenToHalfOpenEnabled;
 
         @Nullable
+        private State initialState;
+
+        @Nullable
         private Boolean writableStackTraceEnabled;
 
         @Nullable
@@ -345,6 +388,9 @@ public class CommonCircuitBreakerConfigurationProperties extends CommonPropertie
          * randomized delay factor value
          */
         private Double randomizedWaitFactor;
+
+        @Nullable
+        private Boolean ignoreClassBindingExceptions;
 
         /**
          * Returns the failure rate threshold for the circuit breaker as percentage.
@@ -421,6 +467,27 @@ public class CommonCircuitBreakerConfigurationProperties extends CommonPropertie
         public InstanceProperties setAutomaticTransitionFromOpenToHalfOpenEnabled(
             Boolean automaticTransitionFromOpenToHalfOpenEnabled) {
             this.automaticTransitionFromOpenToHalfOpenEnabled = automaticTransitionFromOpenToHalfOpenEnabled;
+            return this;
+        }
+        
+        /**
+         * Returns state by which Circuit breaker was initialized
+         *
+         * @return initialState 
+         */
+        @Nullable
+        public State getInitialState(){
+            return this.initialState;
+        }
+
+
+        /**
+         * Sets initial state of Circuit Breaker
+         *
+         * @param state inital state of Circuit breaker, Will set initializion using this state
+         */
+        public InstanceProperties setInitialState(State state){
+            this.initialState = state;
             return this;
         }
 
@@ -651,7 +718,7 @@ public class CommonCircuitBreakerConfigurationProperties extends CommonPropertie
             Objects.requireNonNull(slowCallDurationThreshold);
             if (slowCallDurationThreshold.toNanos() < 1) {
                 throw new IllegalArgumentException(
-                    "waitDurationInOpenStateMillis must be greater than or equal to 1 nanos.");
+                    "slowCallDurationThreshold must be greater than or equal to 1 nanos.");
             }
 
             this.slowCallDurationThreshold = slowCallDurationThreshold;
@@ -696,6 +763,10 @@ public class CommonCircuitBreakerConfigurationProperties extends CommonPropertie
 
         public InstanceProperties setExponentialBackoffMultiplier(
             Double exponentialBackoffMultiplier) {
+            if (exponentialBackoffMultiplier <= 0) {
+                throw new IllegalArgumentException(
+                    "Illegal argument exponentialBackoffMultiplier: " + exponentialBackoffMultiplier + " is less or equal 0");
+            }
             this.exponentialBackoffMultiplier = exponentialBackoffMultiplier;
             return this;
         }
@@ -707,6 +778,10 @@ public class CommonCircuitBreakerConfigurationProperties extends CommonPropertie
 
         public InstanceProperties setExponentialMaxWaitDurationInOpenState(
             Duration exponentialMaxWaitDurationInOpenState) {
+            if (exponentialMaxWaitDurationInOpenState.toMillis() < 1) {
+                throw new IllegalArgumentException(
+                    "Illegal argument interval: " + exponentialMaxWaitDurationInOpenState + " is less than 1 millisecond");
+            }
             this.exponentialMaxWaitDurationInOpenState = exponentialMaxWaitDurationInOpenState;
             return this;
         }
@@ -727,7 +802,21 @@ public class CommonCircuitBreakerConfigurationProperties extends CommonPropertie
         }
 
         public InstanceProperties setRandomizedWaitFactor(Double randomizedWaitFactor) {
+            if (randomizedWaitFactor < 0 || randomizedWaitFactor >= 1) {
+                throw new IllegalArgumentException(
+                    "Illegal argument randomizedWaitFactor: " + randomizedWaitFactor + " is not in range [0..1)");
+            }
             this.randomizedWaitFactor = randomizedWaitFactor;
+            return this;
+        }
+
+        @Nullable
+        public Boolean getIgnoreClassBindingExceptions() {
+            return ignoreClassBindingExceptions;
+        }
+
+        public InstanceProperties setIgnoreClassBindingExceptions(Boolean ignoreClassBindingExceptions) {
+            this.ignoreClassBindingExceptions = ignoreClassBindingExceptions;
             return this;
         }
     }

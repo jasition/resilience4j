@@ -18,6 +18,7 @@ package io.github.resilience4j.common.utils;
 import io.github.resilience4j.common.bulkhead.configuration.CommonBulkheadConfigurationProperties;
 import io.github.resilience4j.common.bulkhead.configuration.CommonThreadPoolBulkheadConfigurationProperties;
 import io.github.resilience4j.common.circuitbreaker.configuration.CommonCircuitBreakerConfigurationProperties;
+import io.github.resilience4j.common.micrometer.configuration.CommonTimerConfigurationProperties;
 import io.github.resilience4j.common.ratelimiter.configuration.CommonRateLimiterConfigurationProperties;
 import io.github.resilience4j.common.retry.configuration.CommonRetryConfigurationProperties;
 import io.github.resilience4j.common.timelimiter.configuration.CommonTimeLimiterConfigurationProperties;
@@ -50,6 +51,10 @@ public class ConfigUtils {
         if (instanceProperties.getEventConsumerBufferSize() == null &&
             baseProperties.getEventConsumerBufferSize() != null) {
             instanceProperties.setEventConsumerBufferSize(baseProperties.getEventConsumerBufferSize());
+        }
+        if (instanceProperties.getIgnoreClassBindingExceptions() == null &&
+            baseProperties.getIgnoreClassBindingExceptions() != null) {
+            instanceProperties.setIgnoreClassBindingExceptions(baseProperties.getIgnoreClassBindingExceptions());
         }
     }
 
@@ -151,4 +156,17 @@ public class ConfigUtils {
 		}
 	}
 
+    /**
+	 * merge only properties that are not part of timer config if any match the conditions of merge
+	 *
+	 * @param baseProperties     base config properties
+	 * @param instanceProperties instance properties
+	 */
+	public static void mergePropertiesIfAny(CommonTimerConfigurationProperties.InstanceProperties baseProperties,
+                                            CommonTimerConfigurationProperties.InstanceProperties instanceProperties) {
+		if (instanceProperties.getEventConsumerBufferSize() == null
+            && baseProperties.getEventConsumerBufferSize() != null) {
+            instanceProperties.setEventConsumerBufferSize(baseProperties.getEventConsumerBufferSize());
+		}
+	}
 }

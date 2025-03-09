@@ -15,10 +15,7 @@
  */
 package io.github.resilience4j.spring6.bulkhead.configure;
 
-import io.github.resilience4j.bulkhead.Bulkhead;
-import io.github.resilience4j.bulkhead.BulkheadConfig;
-import io.github.resilience4j.bulkhead.BulkheadRegistry;
-import io.github.resilience4j.bulkhead.ThreadPoolBulkheadRegistry;
+import io.github.resilience4j.bulkhead.*;
 import io.github.resilience4j.spring6.bulkhead.configure.threadpool.ThreadPoolBulkheadConfiguration;
 import io.github.resilience4j.bulkhead.event.BulkheadEvent;
 import io.github.resilience4j.common.CompositeCustomizer;
@@ -35,6 +32,7 @@ import io.github.resilience4j.spring6.spelresolver.configure.SpelResolverConfigu
 import io.github.resilience4j.spring6.utils.AspectJOnClasspathCondition;
 import io.github.resilience4j.spring6.utils.ReactorOnClasspathCondition;
 import io.github.resilience4j.spring6.utils.RxJava2OnClasspathCondition;
+import io.github.resilience4j.spring6.utils.RxJava3OnClasspathCondition;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.*;
@@ -120,7 +118,12 @@ public class BulkheadConfiguration {
         BulkheadConfigurationProperties properties) {
         bulkheadRegistry.getEventPublisher()
             .onEntryAdded(event -> registerEventConsumer(eventConsumerRegistry, event.getAddedEntry(), properties))
-            .onEntryReplaced(event -> registerEventConsumer(eventConsumerRegistry, event.getNewEntry(), properties));
+            .onEntryReplaced(event -> registerEventConsumer(eventConsumerRegistry, event.getNewEntry(), properties))
+            .onEntryRemoved(event -> unregisterEventConsumer(eventConsumerRegistry, event.getRemovedEntry()));
+    }
+
+    private void unregisterEventConsumer(EventConsumerRegistry<BulkheadEvent> eventConsumerRegistry, Bulkhead bulkHead) {
+        eventConsumerRegistry.removeEventConsumer(bulkHead.getName());
     }
 
     private void registerEventConsumer(EventConsumerRegistry<BulkheadEvent> eventConsumerRegistry,
@@ -151,6 +154,12 @@ public class BulkheadConfiguration {
     @Conditional(value = {RxJava2OnClasspathCondition.class, AspectJOnClasspathCondition.class})
     public RxJava2BulkheadAspectExt rxJava2BulkHeadAspectExt() {
         return new RxJava2BulkheadAspectExt();
+    }
+
+    @Bean
+    @Conditional(value = {RxJava3OnClasspathCondition.class, AspectJOnClasspathCondition.class})
+    public RxJava3BulkheadAspectExt rxJava3BulkHeadAspectExt() {
+        return new RxJava3BulkheadAspectExt();
     }
 
     @Bean

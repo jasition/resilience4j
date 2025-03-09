@@ -19,25 +19,26 @@ import io.github.resilience4j.micronaut.BaseInterceptor;
 import io.github.resilience4j.micronaut.ResilienceInterceptPhase;
 import io.github.resilience4j.micronaut.util.PublisherExtension;
 import io.github.resilience4j.retry.Retry;
+import io.github.resilience4j.retry.RetryConfig;
 import io.github.resilience4j.retry.RetryRegistry;
 import io.micronaut.aop.InterceptedMethod;
+import io.micronaut.aop.InterceptorBean;
 import io.micronaut.aop.MethodInterceptor;
 import io.micronaut.aop.MethodInvocationContext;
 import io.micronaut.context.ExecutionHandleLocator;
 import io.micronaut.context.annotation.Requires;
-import io.micronaut.core.annotation.AnnotationValue;
+import io.micronaut.core.convert.ConversionService;
 import io.micronaut.inject.ExecutableMethod;
 import io.micronaut.inject.MethodExecutionHandle;
 import io.micronaut.scheduling.TaskExecutors;
 import jakarta.inject.Named;
-import jakarta.inject.Singleton;
 
 import java.util.Optional;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 
-@Singleton
+@InterceptorBean(io.github.resilience4j.micronaut.annotation.Retry.class)
 @Requires(beans = RetryRegistry.class)
 public class RetryInterceptor extends BaseInterceptor implements MethodInterceptor<Object, Object> {
     private final RetryRegistry retryRegistry;
@@ -45,15 +46,18 @@ public class RetryInterceptor extends BaseInterceptor implements MethodIntercept
     private final ScheduledExecutorService executorService;
     private final PublisherExtension extension;
 
+    private final ConversionService conversionService;
+
     public RetryInterceptor(
         ExecutionHandleLocator executionHandleLocator,
         RetryRegistry retryRegistry,
         @Named(TaskExecutors.SCHEDULED) ExecutorService executorService,
-        PublisherExtension extension) {
+        PublisherExtension extension, ConversionService conversionService) {
         this.retryRegistry = retryRegistry;
         this.executionHandleLocator = executionHandleLocator;
         this.executorService = (ScheduledExecutorService) executorService;
         this.extension = extension;
+        this.conversionService = conversionService;
     }
 
 
@@ -78,16 +82,17 @@ public class RetryInterceptor extends BaseInterceptor implements MethodIntercept
 
     @Override
     public Object intercept(MethodInvocationContext<Object, Object> context) {
-        Optional<AnnotationValue<io.github.resilience4j.micronaut.annotation.Retry>> opt = context.findAnnotation(io.github.resilience4j.micronaut.annotation.Retry.class);
-        if (!opt.isPresent()) {
+        if (!context.hasAnnotation(io.github.resilience4j.micronaut.annotation.Retry.class)) {
             return context.proceed();
         }
 
         ExecutableMethod executableMethod = context.getExecutableMethod();
         final String name = executableMethod.stringValue(io.github.resilience4j.micronaut.annotation.Retry.class, "name").orElse("default");
-        Retry retry = retryRegistry.retry(name);
+        RetryConfig config = retryRegistry.getConfiguration(name)
+                .orElse(retryRegistry.getDefaultConfig());
+        Retry retry = retryRegistry.retry(name, config);
 
-        InterceptedMethod interceptedMethod = InterceptedMethod.of(context);
+        InterceptedMethod interceptedMethod = InterceptedMethod.of(context, conversionService);
         try {
             switch (interceptedMethod.resultType()) {
                 case PUBLISHER:

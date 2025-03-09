@@ -28,6 +28,7 @@ import io.github.resilience4j.spring6.fallback.FallbackExecutor;
 import io.github.resilience4j.spring6.fallback.configure.FallbackConfiguration;
 import io.github.resilience4j.spring6.spelresolver.SpelResolver;
 import io.github.resilience4j.spring6.spelresolver.configure.SpelResolverConfiguration;
+import io.github.resilience4j.spring6.utils.RxJava3OnClasspathCondition;
 import io.github.resilience4j.timelimiter.TimeLimiter;
 import io.github.resilience4j.timelimiter.TimeLimiterConfig;
 import io.github.resilience4j.timelimiter.TimeLimiterRegistry;
@@ -101,6 +102,12 @@ public class TimeLimiterConfiguration {
     }
 
     @Bean
+    @Conditional({RxJava3OnClasspathCondition.class, AspectJOnClasspathCondition.class})
+    public RxJava3TimeLimiterAspectExt rxJava3TimeLimiterAspectExt() {
+        return new RxJava3TimeLimiterAspectExt();
+    }
+
+    @Bean
     @Conditional({ReactorOnClasspathCondition.class, AspectJOnClasspathCondition.class})
     public ReactorTimeLimiterAspectExt reactorTimeLimiterAspectExt() {
         return new ReactorTimeLimiterAspectExt();
@@ -165,7 +172,12 @@ public class TimeLimiterConfiguration {
                                               TimeLimiterConfigurationProperties properties) {
         timeLimiterRegistry.getEventPublisher()
             .onEntryAdded(event -> registerEventConsumer(eventConsumerRegistry, event.getAddedEntry(), properties))
-            .onEntryReplaced(event -> registerEventConsumer(eventConsumerRegistry, event.getNewEntry(), properties));
+            .onEntryReplaced(event -> registerEventConsumer(eventConsumerRegistry, event.getNewEntry(), properties))
+            .onEntryRemoved(event -> unregisterEventConsumer(eventConsumerRegistry, event.getRemovedEntry()));
+    }
+
+    private static void unregisterEventConsumer(EventConsumerRegistry<TimeLimiterEvent> eventConsumerRegistry, TimeLimiter timeLimiter) {
+        eventConsumerRegistry.removeEventConsumer(timeLimiter.getName());
     }
 
     private static void registerEventConsumer(EventConsumerRegistry<TimeLimiterEvent> eventConsumerRegistry, TimeLimiter timeLimiter,

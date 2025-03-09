@@ -33,6 +33,7 @@ import io.github.resilience4j.spelresolver.configure.SpelResolverConfiguration;
 import io.github.resilience4j.utils.AspectJOnClasspathCondition;
 import io.github.resilience4j.utils.ReactorOnClasspathCondition;
 import io.github.resilience4j.utils.RxJava2OnClasspathCondition;
+import io.github.resilience4j.utils.RxJava3OnClasspathCondition;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.*;
@@ -107,6 +108,12 @@ public class CircuitBreakerConfiguration {
     }
 
     @Bean
+    @Conditional(value = {RxJava3OnClasspathCondition.class, AspectJOnClasspathCondition.class})
+    public RxJava3CircuitBreakerAspectExt rxJava3CircuitBreakerAspect() {
+        return new RxJava3CircuitBreakerAspectExt();
+    }
+
+    @Bean
     @Conditional(value = {ReactorOnClasspathCondition.class, AspectJOnClasspathCondition.class})
     public ReactorCircuitBreakerAspectExt reactorCircuitBreakerAspect() {
         return new ReactorCircuitBreakerAspectExt();
@@ -172,7 +179,12 @@ public class CircuitBreakerConfiguration {
                                       EventConsumerRegistry<CircuitBreakerEvent> eventConsumerRegistry) {
         circuitBreakerRegistry.getEventPublisher()
             .onEntryAdded(event -> registerEventConsumer(eventConsumerRegistry, event.getAddedEntry()))
-            .onEntryReplaced(event -> registerEventConsumer(eventConsumerRegistry, event.getNewEntry()));
+            .onEntryReplaced(event -> registerEventConsumer(eventConsumerRegistry, event.getNewEntry()))
+            .onEntryRemoved(event -> unregisterEventConsumer(eventConsumerRegistry, event.getRemovedEntry()));
+    }
+
+    private void unregisterEventConsumer(EventConsumerRegistry<CircuitBreakerEvent> eventConsumerRegistry, CircuitBreaker circuitBreaker) {
+        eventConsumerRegistry.removeEventConsumer(circuitBreaker.getName());
     }
 
     private void registerEventConsumer(
@@ -185,4 +197,5 @@ public class CircuitBreakerConfiguration {
         circuitBreaker.getEventPublisher().onEvent(eventConsumerRegistry
             .createEventConsumer(circuitBreaker.getName(), eventConsumerBufferSize));
     }
+
 }

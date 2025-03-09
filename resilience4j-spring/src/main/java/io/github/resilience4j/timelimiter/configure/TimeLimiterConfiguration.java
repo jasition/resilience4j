@@ -35,6 +35,7 @@ import io.github.resilience4j.timelimiter.event.TimeLimiterEvent;
 import io.github.resilience4j.utils.AspectJOnClasspathCondition;
 import io.github.resilience4j.utils.ReactorOnClasspathCondition;
 import io.github.resilience4j.utils.RxJava2OnClasspathCondition;
+import io.github.resilience4j.utils.RxJava3OnClasspathCondition;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.*;
@@ -98,6 +99,12 @@ public class TimeLimiterConfiguration {
     @Conditional({RxJava2OnClasspathCondition.class, AspectJOnClasspathCondition.class})
     public RxJava2TimeLimiterAspectExt rxJava2TimeLimiterAspectExt() {
         return new RxJava2TimeLimiterAspectExt();
+    }
+
+    @Bean
+    @Conditional({RxJava3OnClasspathCondition.class, AspectJOnClasspathCondition.class})
+    public RxJava3TimeLimiterAspectExt rxJava3TimeLimiterAspectExt() {
+        return new RxJava3TimeLimiterAspectExt();
     }
 
     @Bean
@@ -173,7 +180,12 @@ public class TimeLimiterConfiguration {
                                               TimeLimiterConfigurationProperties properties) {
         timeLimiterRegistry.getEventPublisher()
             .onEntryAdded(event -> registerEventConsumer(eventConsumerRegistry, event.getAddedEntry(), properties))
-            .onEntryReplaced(event -> registerEventConsumer(eventConsumerRegistry, event.getNewEntry(), properties));
+            .onEntryReplaced(event -> registerEventConsumer(eventConsumerRegistry, event.getNewEntry(), properties))
+            .onEntryRemoved(event -> unregisterEventConsumer(eventConsumerRegistry, event.getRemovedEntry()));
+    }
+
+    private static void unregisterEventConsumer(EventConsumerRegistry<TimeLimiterEvent> eventConsumerRegistry, TimeLimiter timeLimiter) {
+        eventConsumerRegistry.removeEventConsumer(timeLimiter.getName());
     }
 
     private static void registerEventConsumer(EventConsumerRegistry<TimeLimiterEvent> eventConsumerRegistry, TimeLimiter timeLimiter,

@@ -43,7 +43,12 @@ public class CircuitBreakerAutoTransitionStateMachineTest {
     public void setUp() {
         CircuitBreakerConfig circuitBreakerConfig = CircuitBreakerConfig.custom()
             .failureRateThreshold(50)
-            .slidingWindow(5, 5, CircuitBreakerConfig.SlidingWindowType.COUNT_BASED)
+            .slidingWindow(
+                5,
+                5,
+                CircuitBreakerConfig.SlidingWindowType.COUNT_BASED,
+                CircuitBreakerConfig.SlidingWindowSynchronizationStrategy.SYNCHRONIZED
+            )
             .permittedNumberOfCallsInHalfOpenState(3)
             .automaticTransitionFromOpenToHalfOpenEnabled(true)
             .waitDurationInOpenState(Duration.ofSeconds(2))
@@ -95,7 +100,7 @@ public class CircuitBreakerAutoTransitionStateMachineTest {
         circuitBreaker.transitionToForcedOpenState();
 
         // Verify scheduled future is canceled
-        then(mockFuture).should(times(1)).cancel(true);
+        then(mockFuture).should(times(1)).cancel(false);
     }
 
     @Test

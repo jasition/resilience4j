@@ -19,6 +19,7 @@
 package io.github.resilience4j.retry;
 
 import io.github.resilience4j.core.EventConsumer;
+import io.github.resilience4j.core.functions.CheckedConsumer;
 import io.github.resilience4j.core.functions.CheckedFunction;
 import io.github.resilience4j.core.functions.CheckedRunnable;
 import io.github.resilience4j.core.functions.CheckedSupplier;
@@ -28,6 +29,7 @@ import io.github.resilience4j.retry.internal.RetryImpl;
 import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.*;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -119,6 +121,21 @@ public interface Retry {
     }
 
     /**
+     * Decorates CompletionStageSupplier using current instance as context.
+     *
+     * @param scheduler execution service to use to schedule retries
+     * @param supplier  completion stage supplier
+     * @param <T>       type of completion stage result
+     * @return decorated supplier
+     */
+    default <T> Supplier<CompletionStage<T>> decorateCompletionStage(
+            ScheduledExecutorService scheduler,
+            Supplier<CompletionStage<T>> supplier
+    ) {
+        return decorateCompletionStage(this, scheduler, supplier);
+    }
+
+    /**
      * Creates a retryable supplier.
      *
      * @param retry    the retry context
@@ -146,6 +163,17 @@ public interface Retry {
     }
 
     /**
+     * Creates a retryable supplier using current instance as context.
+     *
+     * @param supplier the original function
+     * @param <T>      the type of results supplied by this supplier
+     * @return a retryable function
+     */
+    default <T> CheckedSupplier<T> decorateCheckedSupplier(CheckedSupplier<T> supplier) {
+        return decorateCheckedSupplier(this, supplier);
+    }
+
+    /**
      * Creates a retryable runnable.
      *
      * @param retry    the retry context
@@ -158,13 +186,26 @@ public interface Retry {
             do {
                 try {
                     runnable.run();
-                    context.onComplete();
-                    break;
+                    final boolean validationOfResult = context.onResult(null);
+                    if (!validationOfResult) {
+                        context.onComplete();
+                        break;
+                    }
                 } catch (Exception exception) {
                     context.onError(exception);
                 }
             } while (true);
         };
+    }
+
+    /**
+     * Creates a retryable runnable using current instance as context.
+     *
+     * @param runnable the original runnable
+     * @return a retryable runnable
+     */
+    default CheckedRunnable decorateCheckedRunnable(CheckedRunnable runnable) {
+        return decorateCheckedRunnable(this, runnable);
     }
 
     /**
@@ -196,6 +237,55 @@ public interface Retry {
     }
 
     /**
+     * Creates a retryable function using current instance as context.
+     *
+     * @param function the original function
+     * @param <T>      the type of the input to the function
+     * @param <R>      the result type of the function
+     * @return a retryable function
+     */
+    default <T, R> CheckedFunction<T, R> decorateCheckedFunction(CheckedFunction<T, R> function) {
+        return decorateCheckedFunction(this, function);
+    }
+
+    /**
+     * Creates a retryable consumer.
+     *
+     * @param retry    the retry context
+     * @param consumer the original consumer
+     * @param <T>      the type of the input to the consumer
+     * @return a retryable consumer
+     */
+    static <T> CheckedConsumer<T> decorateCheckedConsumer(Retry retry, CheckedConsumer<T> consumer) {
+        return (T t) -> {
+            Retry.Context context = retry.context();
+            do {
+                try {
+                    consumer.accept(t);
+                    final boolean validationOfResult = context.onResult(null);
+                    if (!validationOfResult) {
+                        context.onComplete();
+                        break;
+                    }
+                } catch (Exception exception) {
+                    context.onError(exception);
+                }
+            } while (true);
+        };
+    }
+
+    /**
+     * Creates a retryable consumer using current instance as context.
+     *
+     * @param consumer the original consumer
+     * @param <T>      the type of the input to the consumer
+     * @return a retryable consumer
+     */
+    default <T> CheckedConsumer<T> decorateCheckedConsumer(CheckedConsumer<T> consumer) {
+        return decorateCheckedConsumer(this, consumer);
+    }
+
+    /**
      * Creates a retryable supplier.
      *
      * @param retry    the retry context
@@ -219,6 +309,17 @@ public interface Retry {
                 }
             } while (true);
         };
+    }
+
+    /**
+     * Creates a retryable supplier using current instance as context.
+     *
+     * @param supplier the original function
+     * @param <T>      the type of results supplied by this supplier
+     * @return a retryable function
+     */
+    default <T> Supplier<T> decorateSupplier(Supplier<T> supplier) {
+        return decorateSupplier(this, supplier);
     }
 
     /**
@@ -248,6 +349,18 @@ public interface Retry {
     }
 
     /**
+     * Creates a retryable callable using current instance as context.
+     *
+     * @param supplier the original function
+     * @param <T>      the type of results supplied by this supplier
+     * @return a retryable function
+     */
+    default <T> Callable<T> decorateCallable(Callable<T> supplier) {
+        return decorateCallable(this, supplier);
+    }
+
+
+    /**
      * Creates a retryable runnable.
      *
      * @param retry    the retry context
@@ -260,13 +373,26 @@ public interface Retry {
             do {
                 try {
                     runnable.run();
-                    context.onComplete();
-                    break;
+                    final boolean validationOfResult = context.onResult(null);
+                    if (!validationOfResult) {
+                        context.onComplete();
+                        break;
+                    }
                 } catch (RuntimeException runtimeException) {
                     context.onRuntimeError(runtimeException);
                 }
             } while (true);
         };
+    }
+
+    /**
+     * Creates a retryable runnable using current instance as context.
+     *
+     * @param runnable the original runnable
+     * @return a retryable runnable
+     */
+    default Runnable decorateRunnable(Runnable runnable) {
+        return decorateRunnable(this, runnable);
     }
 
     /**
@@ -294,6 +420,42 @@ public interface Retry {
                 }
             } while (true);
         };
+    }
+
+    /**
+     * Creates a retryable consumer.
+     *
+     * @param retry    the retry context
+     * @param consumer the original consumer
+     * @param <T>      the type of the input to the consumer
+     * @return a retryable consumer
+     */
+    static <T> Consumer<T> decorateConsumer(Retry retry, Consumer<T> consumer) {
+        return (T t) -> {
+            Retry.Context context = retry.context();
+            do {
+                try {
+                    consumer.accept(t);
+                    final boolean validationOfResult = context.onResult(null);
+                    if (!validationOfResult) {
+                        context.onComplete();
+                        break;
+                    }
+                } catch (RuntimeException runtimeException) {
+                    context.onRuntimeError(runtimeException);
+                }
+            } while (true);
+        };
+    }
+
+    /**
+     * Creates a retryable consumer using current instance as context.
+     *
+     * @param consumer the original consumer
+     * @return a retryable consumer
+     */
+    default <T> Consumer<T> decorateConsumer(Consumer<T> consumer) {
+        return decorateConsumer(this, consumer);
     }
 
     /**
@@ -431,6 +593,14 @@ public interface Retry {
          * @return the number of failed calls after all retry attempts
          */
         long getNumberOfFailedCallsWithRetryAttempt();
+
+
+        /**
+         * Returns the number of total calls after all retry attempts.
+         *
+         * @return the number of total calls after all retry attempts
+         */
+        long getNumberOfTotalCalls();
     }
 
     interface AsyncContext<T> {
@@ -543,14 +713,18 @@ public interface Retry {
             final CompletionStage<T> stage = supplier.get();
 
             stage.whenComplete((result, throwable) -> {
-                if (throwable != null) {
-                    if (throwable instanceof Exception) {
-                        onError((Exception) throwable);
+                try {
+                    if (throwable != null) {
+                        if (throwable instanceof Exception) {
+                            onError((Exception) throwable);
+                        } else {
+                            promise.completeExceptionally(throwable);
+                        }
                     } else {
-                        promise.completeExceptionally(throwable);
+                        onResult(result);
                     }
-                } else {
-                    onResult(result);
+                } catch (Throwable unknownTh) {
+                    promise.completeExceptionally(unknownTh);
                 }
             });
         }
@@ -558,7 +732,7 @@ public interface Retry {
         private void onError(Exception t) {
             final long delay = retryContext.onError(t);
 
-            if (delay < 1) {
+            if (delay < 0) {
                 promise.completeExceptionally(t);
             } else {
                 scheduler.schedule(this, delay, TimeUnit.MILLISECONDS);
@@ -568,7 +742,7 @@ public interface Retry {
         private void onResult(T result) {
             final long delay = retryContext.onResult(result);
 
-            if (delay < 1) {
+            if (delay < 0) {
                 try {
                     retryContext.onComplete();
                     promise.complete(result);

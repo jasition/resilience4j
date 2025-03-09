@@ -18,6 +18,12 @@ public class CircuitBreakerDummyService implements TestDummyService {
     }
 
     @Override
+    @CircuitBreaker(name = BACKEND, fallbackMethod = "recovery")
+    public String syncSuccess() {
+        return "ok";
+    }
+
+    @Override
     public CompletionStage<String> asyncThreadPool() {
         // no-op
         return null;
@@ -75,6 +81,36 @@ public class CircuitBreakerDummyService implements TestDummyService {
     @CircuitBreaker(name = BACKEND, fallbackMethod = "flowableRecovery")
     public Flowable<String> flowable() {
         return flowableError();
+    }
+
+    @Override
+    @CircuitBreaker(name = BACKEND, fallbackMethod = "rx3ObservableRecovery")
+    public io.reactivex.rxjava3.core.Observable<String> rx3Observable() {
+        return rx3ObservableError();
+    }
+
+    @Override
+    @CircuitBreaker(name = BACKEND, fallbackMethod = "rx3SingleRecovery")
+    public io.reactivex.rxjava3.core.Single<String> rx3Single() {
+        return rx3SingleError();
+    }
+
+    @Override
+    @CircuitBreaker(name = BACKEND, fallbackMethod = "rx3CompletableRecovery")
+    public io.reactivex.rxjava3.core.Completable rx3Completable() {
+        return rx3CompletableError();
+    }
+
+    @Override
+    @CircuitBreaker(name = BACKEND, fallbackMethod = "rx3MaybeRecovery")
+    public io.reactivex.rxjava3.core.Maybe<String> rx3Maybe() {
+        return rx3MaybeError();
+    }
+
+    @Override
+    @CircuitBreaker(name = BACKEND, fallbackMethod = "rx3FlowableRecovery")
+    public io.reactivex.rxjava3.core.Flowable<String> rx3Flowable() {
+        return rx3FlowableError();
     }
 
     @Override

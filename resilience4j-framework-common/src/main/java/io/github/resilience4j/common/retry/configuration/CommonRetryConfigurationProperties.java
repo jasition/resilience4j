@@ -23,7 +23,6 @@ import io.github.resilience4j.core.lang.Nullable;
 import io.github.resilience4j.retry.RetryConfig;
 
 import java.time.Duration;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -198,18 +197,16 @@ public class CommonRetryConfigurationProperties extends CommonProperties {
         if (maxWaitDuration != null &&
             randomizedWaitFactor != null &&
             backoffMultiplier != null) {
-            builder.intervalFunction(
-                IntervalFunction.ofExponentialRandomBackoff(waitDuration, backoffMultiplier, randomizedWaitFactor, maxWaitDuration));
+            withIntervalBiFunction(builder,
+                    IntervalFunction.ofExponentialRandomBackoff(waitDuration, backoffMultiplier, randomizedWaitFactor, maxWaitDuration));
         } else if (randomizedWaitFactor != null &&
             backoffMultiplier != null) {
-            builder.intervalFunction(
-                IntervalFunction.ofExponentialRandomBackoff(waitDuration, backoffMultiplier, randomizedWaitFactor));
+            withIntervalBiFunction(builder,
+                    IntervalFunction.ofExponentialRandomBackoff(waitDuration, backoffMultiplier, randomizedWaitFactor));
         } else if (backoffMultiplier != null) {
-            builder.intervalFunction(
-                IntervalFunction.ofExponentialRandomBackoff(waitDuration, backoffMultiplier));
+            withIntervalBiFunction(builder, IntervalFunction.ofExponentialRandomBackoff(waitDuration, backoffMultiplier));
         } else {
-            builder.intervalFunction(
-                IntervalFunction.ofExponentialRandomBackoff(waitDuration));
+            withIntervalBiFunction(builder, IntervalFunction.ofExponentialRandomBackoff(waitDuration));
         }
     }
 
@@ -219,14 +216,11 @@ public class CommonRetryConfigurationProperties extends CommonProperties {
         Duration maxWaitDuration = properties.getExponentialMaxWaitDuration();
         if (maxWaitDuration != null &&
             backoffMultiplier != null) {
-            builder.intervalFunction(
-                IntervalFunction.ofExponentialBackoff(waitDuration, backoffMultiplier, maxWaitDuration));
+            withIntervalBiFunction(builder, IntervalFunction.ofExponentialBackoff(waitDuration, backoffMultiplier, maxWaitDuration));
         } else if (backoffMultiplier != null) {
-            builder.intervalFunction(
-                IntervalFunction.ofExponentialBackoff(waitDuration, backoffMultiplier));
+            withIntervalBiFunction(builder, IntervalFunction.ofExponentialBackoff(waitDuration, backoffMultiplier));
         } else {
-            builder.intervalFunction(
-                IntervalFunction.ofExponentialBackoff(waitDuration));
+            withIntervalBiFunction(builder, IntervalFunction.ofExponentialBackoff(waitDuration));
         }
     }
 
@@ -234,12 +228,14 @@ public class CommonRetryConfigurationProperties extends CommonProperties {
         Duration waitDuration = properties.getWaitDuration();
         Double randomizedWaitFactor = properties.getRandomizedWaitFactor();
         if (randomizedWaitFactor != null) {
-            builder.intervalFunction(
-                IntervalFunction.ofRandomized(waitDuration, randomizedWaitFactor));
+            withIntervalBiFunction(builder, IntervalFunction.ofRandomized(waitDuration, randomizedWaitFactor));
         } else {
-            builder.intervalFunction(
-                IntervalFunction.ofRandomized(waitDuration));
+            withIntervalBiFunction(builder, IntervalFunction.ofRandomized(waitDuration));
         }
+    }
+
+    private void withIntervalBiFunction(RetryConfig.Builder<Object> builder, IntervalFunction intervalFunction) {
+        builder.intervalBiFunction(IntervalBiFunction.ofIntervalFunction(intervalFunction));
     }
 
     /**
@@ -342,9 +338,9 @@ public class CommonRetryConfigurationProperties extends CommonProperties {
 
         public InstanceProperties setWaitDuration(Duration waitDuration) {
             Objects.requireNonNull(waitDuration);
-            if (waitDuration.toMillis() < 0) {
+            if (waitDuration.isNegative()) {
                 throw new IllegalArgumentException(
-                    "waitDuration must be a positive value");
+                    "Illegal argument waitDuration: " + waitDuration + " is negative");
             }
 
             this.waitDuration = waitDuration;
@@ -459,6 +455,10 @@ public class CommonRetryConfigurationProperties extends CommonProperties {
         }
 
         public InstanceProperties setExponentialBackoffMultiplier(Double exponentialBackoffMultiplier) {
+            if (exponentialBackoffMultiplier <= 0) {
+                throw new IllegalArgumentException(
+                    "Illegal argument exponentialBackoffMultiplier: " + exponentialBackoffMultiplier + " is less or equal 0");
+            }
             this.exponentialBackoffMultiplier = exponentialBackoffMultiplier;
             return this;
         }
@@ -469,6 +469,10 @@ public class CommonRetryConfigurationProperties extends CommonProperties {
         }
 
         public InstanceProperties setExponentialMaxWaitDuration(Duration exponentialMaxWaitDuration) {
+            if (exponentialMaxWaitDuration.isNegative()) {
+                throw new IllegalArgumentException(
+                    "Illegal argument exponentialMaxWaitDuration: " + exponentialMaxWaitDuration + " is negative");
+            }
             this.exponentialMaxWaitDuration = exponentialMaxWaitDuration;
             return this;
         }
@@ -489,6 +493,10 @@ public class CommonRetryConfigurationProperties extends CommonProperties {
         }
 
         public InstanceProperties setRandomizedWaitFactor(Double randomizedWaitFactor) {
+            if (randomizedWaitFactor < 0 || randomizedWaitFactor >= 1) {
+                throw new IllegalArgumentException(
+                    "Illegal argument randomizedWaitFactor: " + randomizedWaitFactor + " is not in range [0..1)");
+            }
             this.randomizedWaitFactor = randomizedWaitFactor;
             return this;
         }

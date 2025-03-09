@@ -18,9 +18,12 @@ package io.github.resilience4j.micronaut.timelimiter;
 import io.github.resilience4j.micronaut.BaseInterceptor;
 import io.github.resilience4j.micronaut.ResilienceInterceptPhase;
 import io.github.resilience4j.micronaut.util.PublisherExtension;
+import io.github.resilience4j.retry.RetryConfig;
 import io.github.resilience4j.timelimiter.TimeLimiter;
+import io.github.resilience4j.timelimiter.TimeLimiterConfig;
 import io.github.resilience4j.timelimiter.TimeLimiterRegistry;
 import io.micronaut.aop.InterceptedMethod;
+import io.micronaut.aop.InterceptorBean;
 import io.micronaut.aop.MethodInterceptor;
 import io.micronaut.aop.MethodInvocationContext;
 import io.micronaut.context.ExecutionHandleLocator;
@@ -38,7 +41,7 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 
-@Singleton
+@InterceptorBean(io.github.resilience4j.micronaut.annotation.TimeLimiter.class)
 @Requires(beans = TimeLimiterRegistry.class)
 public class TimeLimiterInterceptor extends BaseInterceptor implements MethodInterceptor<Object,Object> {
 
@@ -82,7 +85,9 @@ public class TimeLimiterInterceptor extends BaseInterceptor implements MethodInt
 
         ExecutableMethod<Object, Object> executableMethod = context.getExecutableMethod();
         final String name = executableMethod.stringValue(io.github.resilience4j.micronaut.annotation.TimeLimiter.class, "name").orElse("default");
-        TimeLimiter timeLimiter = this.timeLimiterRegistry.timeLimiter(name);
+        TimeLimiterConfig config = this.timeLimiterRegistry.getConfiguration(name)
+                .orElse(this.timeLimiterRegistry.getDefaultConfig());
+        TimeLimiter timeLimiter = this.timeLimiterRegistry.timeLimiter(name, config);
 
         InterceptedMethod interceptedMethod = InterceptedMethod.of(context);
         try {

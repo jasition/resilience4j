@@ -21,9 +21,12 @@ package io.github.resilience4j.decorators;
 import io.github.resilience4j.bulkhead.Bulkhead;
 import io.github.resilience4j.bulkhead.BulkheadFullException;
 import io.github.resilience4j.bulkhead.ThreadPoolBulkhead;
+import io.github.resilience4j.bulkhead.ThreadPoolBulkheadConfig;
+import io.github.resilience4j.bulkhead.ThreadPoolBulkheadRegistry;
 import io.github.resilience4j.cache.Cache;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.core.functions.CheckedConsumer;
 import io.github.resilience4j.core.functions.CheckedFunction;
 import io.github.resilience4j.core.functions.CheckedRunnable;
 import io.github.resilience4j.core.functions.CheckedSupplier;
@@ -54,10 +57,8 @@ import java.util.function.Supplier;
 import static com.jayway.awaitility.Awaitility.matches;
 import static com.jayway.awaitility.Awaitility.waitAtMost;
 import static java.util.Arrays.asList;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.BDDMockito.given;
-import static org.mockito.BDDMockito.then;
+import static org.assertj.core.api.Assertions.*;
+import static org.mockito.BDDMockito.*;
 import static org.mockito.Mockito.*;
 
 public class DecoratorsTest {
@@ -406,6 +407,62 @@ public class DecoratorsTest {
     }
 
     @Test
+    public void testDecorateCheckedSupplierWithThreadPoolBulkheadSucceeds() throws Exception {
+        String expected = "Hello world";
+        given(helloWorldService.returnHelloWorldWithException()).willReturn(expected);
+        ThreadPoolBulkhead threadPoolBulkhead = ThreadPoolBulkhead.ofDefaults("helloBackend");
+
+        CompletionStage<String> completionStage = Decorators
+                .ofCheckedSupplier(() -> helloWorldService.returnHelloWorldWithException())
+                .withThreadPoolBulkhead(threadPoolBulkhead)
+                .get();
+
+        // make sure normal execution is successful
+        String actual = completionStage.toCompletableFuture().get();
+        assertThat(actual).isEqualTo(expected);
+    }
+
+    @Test
+    public void testDecorateCheckedSupplierWithThreadPoolBulkheadWithExceptionThrown() throws Exception {
+        IOException exception = new IOException("thrown from mock");
+        given(helloWorldService.returnHelloWorldWithException()).willThrow(exception);
+        ThreadPoolBulkhead threadPoolBulkhead = ThreadPoolBulkhead.ofDefaults("helloBackend");
+
+        CompletionStage<String> completionStage = Decorators
+                .ofCheckedSupplier(() -> helloWorldService.returnHelloWorldWithException())
+                .withThreadPoolBulkhead(threadPoolBulkhead)
+                .get();
+
+        try {
+            completionStage.toCompletableFuture().get();
+            fail("expected exception");
+        } catch (Exception ex) {
+            assertThat(ex.getCause()).isEqualTo(exception);
+        }
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void testDecorateCheckedSupplierWithThreadPoolBulkheadFull() throws Exception {
+        given(helloWorldService.returnHelloWorldWithException()).willReturn("Hello world");
+        ThreadPoolBulkhead threadPoolBulkheadMock = mock(ThreadPoolBulkhead.class, RETURNS_DEEP_STUBS);
+
+        willThrow(BulkheadFullException.createBulkheadFullException(threadPoolBulkheadMock)).given(threadPoolBulkheadMock).submit(isA(Callable.class));
+        willDoNothing().given(helloWorldService).sayHelloWorldWithException();
+
+        CompletionStage<String> completionStage = Decorators
+                .ofCheckedSupplier(() -> helloWorldService.returnHelloWorldWithException())
+                .withThreadPoolBulkhead(threadPoolBulkheadMock)
+                .get();
+        try {
+            completionStage.toCompletableFuture().get();
+            fail("expected BulkheadFullException");
+        } catch (Exception ex) {
+            assertThat(ex.getCause()).isInstanceOf(BulkheadFullException.class);
+        }
+    }
+
+    @Test
     public void testDecorateCallableWithFallback() throws Throwable {
         CircuitBreaker circuitBreaker = CircuitBreaker.ofDefaults("helloBackend");
         circuitBreaker.transitionToOpenState();
@@ -565,6 +622,57 @@ public class DecoratorsTest {
         then(helloWorldService).should(times(1)).sayHelloWorldWithException();
     }
 
+    @Test
+    public void testDecorateCheckedRunnableWithThreadPoolBulkheadSucceeds() throws Exception {
+        willDoNothing().given(helloWorldService).sayHelloWorldWithException();
+        ThreadPoolBulkhead threadPoolBulkhead = ThreadPoolBulkhead.ofDefaults("helloBackend");
+
+        CompletionStage<Void> completionStage = Decorators
+                .ofCheckedRunnable(() -> helloWorldService.sayHelloWorldWithException())
+                .withThreadPoolBulkhead(threadPoolBulkhead)
+                .get();
+
+        // make sure normal execution is successful
+        completionStage.toCompletableFuture().get();
+    }
+
+    @Test
+    public void testDecorateCheckedRunnableWithThreadPoolBulkheadWithExceptionThrown() throws Exception {
+        IOException exception = new IOException("thrown from mock");
+        willThrow(exception).given(helloWorldService).sayHelloWorldWithException();
+        ThreadPoolBulkhead threadPoolBulkhead = ThreadPoolBulkhead.ofDefaults("helloBackend");
+
+        CompletionStage<Void> completionStage = Decorators
+                .ofCheckedRunnable(() -> helloWorldService.sayHelloWorldWithException())
+                .withThreadPoolBulkhead(threadPoolBulkhead)
+                .get();
+
+        try {
+            completionStage.toCompletableFuture().get();
+            fail("expected exception");
+        } catch (Exception ex) {
+            assertThat(ex.getCause()).isEqualTo(exception);
+        }
+    }
+
+    @Test
+    public void testDecorateCheckedRunnableWithThreadPoolBulkheadFull() throws Exception {
+        ThreadPoolBulkhead threadPoolBulkheadMock = mock(ThreadPoolBulkhead.class, RETURNS_DEEP_STUBS);
+
+        willThrow(BulkheadFullException.createBulkheadFullException(threadPoolBulkheadMock)).given(threadPoolBulkheadMock).submit(any(Runnable.class));
+        willDoNothing().given(helloWorldService).sayHelloWorldWithException();
+
+        CompletionStage<Void> completionStage = Decorators
+                .ofCheckedRunnable(() -> helloWorldService.sayHelloWorldWithException())
+                .withThreadPoolBulkhead(threadPoolBulkheadMock)
+                .get();
+        try {
+            completionStage.toCompletableFuture().get();
+            fail("expected BulkheadFullException");
+        } catch (Exception ex) {
+            assertThat(ex.getCause()).isInstanceOf(BulkheadFullException.class);
+        }
+    }
 
     @Test
     public void testDecorateCompletionStage() throws ExecutionException, InterruptedException {
@@ -731,6 +839,27 @@ public class DecoratorsTest {
         CircuitBreaker.Metrics metrics = circuitBreaker.getMetrics();
         assertThat(metrics.getNumberOfBufferedCalls()).isEqualTo(1);
         assertThat(metrics.getNumberOfSuccessfulCalls()).isEqualTo(1);
+    }
+
+    @Test
+    public void testDecorateCheckedConsumer() {
+        given(helloWorldService.returnHelloWorldWithName("Name"))
+            .willReturn("Hello world Name");
+        CircuitBreaker circuitBreaker = CircuitBreaker.ofDefaults("helloBackend");
+        CheckedConsumer<String> decoratedConsumer = Decorators
+            .ofCheckedConsumer(helloWorldService::returnHelloWorldWithName)
+            .withCircuitBreaker(circuitBreaker)
+            .withRetry(Retry.ofDefaults("id"))
+            .withRateLimiter(RateLimiter.ofDefaults("testName"))
+            .withBulkhead(Bulkhead.ofDefaults("testName"))
+            .decorate();
+
+        Try.run(() -> decoratedConsumer.accept("Name"));
+
+        CircuitBreaker.Metrics metrics = circuitBreaker.getMetrics();
+        assertThat(metrics.getNumberOfBufferedCalls()).isEqualTo(1);
+        assertThat(metrics.getNumberOfSuccessfulCalls()).isEqualTo(1);
+        then(helloWorldService).should(times(1)).returnHelloWorldWithName("Name");
     }
 
     @Test

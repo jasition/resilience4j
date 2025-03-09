@@ -16,6 +16,8 @@
 package io.github.resilience4j.spring6.ratelimiter.configure;
 
 
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.event.CircuitBreakerEvent;
 import io.github.resilience4j.common.CompositeCustomizer;
 import io.github.resilience4j.common.ratelimiter.configuration.RateLimiterConfigCustomizer;
 import io.github.resilience4j.common.ratelimiter.configuration.CommonRateLimiterConfigurationProperties.InstanceProperties;
@@ -34,6 +36,7 @@ import io.github.resilience4j.spring6.spelresolver.configure.SpelResolverConfigu
 import io.github.resilience4j.spring6.utils.AspectJOnClasspathCondition;
 import io.github.resilience4j.spring6.utils.ReactorOnClasspathCondition;
 import io.github.resilience4j.spring6.utils.RxJava2OnClasspathCondition;
+import io.github.resilience4j.spring6.utils.RxJava3OnClasspathCondition;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.*;
@@ -120,7 +123,12 @@ public class RateLimiterConfiguration {
         RateLimiterConfigurationProperties properties) {
         rateLimiterRegistry.getEventPublisher()
             .onEntryAdded(event -> registerEventConsumer(eventConsumerRegistry, event.getAddedEntry(), properties))
-            .onEntryReplaced(event -> registerEventConsumer(eventConsumerRegistry, event.getNewEntry(), properties));
+            .onEntryReplaced(event -> registerEventConsumer(eventConsumerRegistry, event.getNewEntry(), properties))
+            .onEntryRemoved(event -> unregisterEventConsumer(eventConsumerRegistry, event.getRemovedEntry()));
+    }
+
+    private void unregisterEventConsumer(EventConsumerRegistry<RateLimiterEvent> eventConsumerRegistry, RateLimiter rateLimiter) {
+        eventConsumerRegistry.removeEventConsumer(rateLimiter.getName());
     }
 
     private void registerEventConsumer(
@@ -155,6 +163,12 @@ public class RateLimiterConfiguration {
     @Conditional(value = {RxJava2OnClasspathCondition.class, AspectJOnClasspathCondition.class})
     public RxJava2RateLimiterAspectExt rxJava2RateLimiterAspectExt() {
         return new RxJava2RateLimiterAspectExt();
+    }
+
+    @Bean
+    @Conditional(value = {RxJava3OnClasspathCondition.class, AspectJOnClasspathCondition.class})
+    public RxJava3RateLimiterAspectExt rxJava3RateLimiterAspectExt() {
+        return new RxJava3RateLimiterAspectExt();
     }
 
     @Bean

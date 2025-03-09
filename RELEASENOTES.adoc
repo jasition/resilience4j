@@ -39,7 +39,7 @@
 * CircuitBreakerRegistry has a new method which takes a Supplier of a CircuitBreakerConfig so that the CircuitBreakerConfig is only created when needed.
 
 === Version 0.3.3
-* CircuitBreaker has a new method `getCircuitBreakerConfig` which allows to retrieve the CircuitBreakerConfig of the CircuitBreaker.
+* CircuitBreaker has a new method `+getCircuitBreakerConfig+` which allows to retrieve the CircuitBreakerConfig of the CircuitBreaker.
 * Renamed the state HALF_CLOSED to HALF_OPEN to match the pattern description of Martin Fowler.
 
 === Version 0.3.4
@@ -133,7 +133,7 @@ NOTE: Breaking changes:
 * PR #166: Bulkhead metrics for Dropwizard metrics module
 * PR #176: Retrofit enqueue support for circuit breaker and rate limiter
 * PR #177: Dynamic rate limiter configuration
-* PR #181: RxJava bulkhead operator for `Maybe` and `Completable`
+* PR #181: RxJava bulkhead operator for `+Maybe+` and `+Completable+`
 * PR #169: Bulkhead integration with Ratpack and call finished metric for bulkhead
 * PR #184: Dynamic bulkhead configuration
 
@@ -331,7 +331,7 @@ NOTE: Breaking changes:
 === Enhancements
 * RetryConfig.DEFAULT_MAX_ATTEMPTS should be public [#1180](https://github.com/resilience4j/resilience4j/issues/1180)
 * Circuitbreaker doesn't open when nested TimeLimiter throws TimeOutCancellationException [#1123](https://github.com/resilience4j/resilience4j/issues/1123)
-* Enhance Server Side Events  `/circuitbreaker/events`  [#1076](https://github.com/resilience4j/resilience4j/issues/1076)
+* Enhance Server Side Events  `+/circuitbreaker/events+`  [#1076](https://github.com/resilience4j/resilience4j/issues/1076)
 * CallNotPermittedException should contain circuit breaker name (and possibly other information) [#1062](https://github.com/resilience4j/resilience4j/issues/1062)
 * Retry: Exponential backoff with constant behaviour after certain time [#1044](https://github.com/resilience4j/resilience4j/issues/1044)
 * Respecting the clock set in the CircuitBreakerStateMachine for detecting slow calls [#734](https://github.com/resilience4j/resilience4j/issues/734)
@@ -399,6 +399,14 @@ Issue #1414: SpEL expressions support passing runtime method arguments to bean m
 ==== Enhancements
 * Support Spring Boot 3 by adding resilience4j-spring-boot3 and resilience4j-spring6
 * Issue #1787: Apply Spring Boot customizers even if there is no instance entry in the config file
+* Removed deprecated configuration properties [#1188](https://github.com/resilience4j/resilience4j/pull/1188)
+** Circutbreaker:
+*** `+ringBufferSizeInClosedState+` replaced by `+slidingWindowSize+`
+*** `+ringBufferSizeInHalfOpenState+` replaced by `+permittedNumberOfCallsInHalfOpenState+`
+** Retry:
+*** `+maxRetryAttempts+` replaced by `+maxAttempts+`
+** Bulkhead:
+*** `+contextPropagator+` list replaced by `+contextPropagators+`
 
 ==== Bugs
 
@@ -410,3 +418,54 @@ Issue #1414: SpEL expressions support passing runtime method arguments to bean m
 ==== Bugs
 
 * Issue #1835: Fixed CircuitBreaker CheckedSupplier and CheckedFunction decorator not opening on recordResultPredicate
+
+=== Version 2.1.0
+
+==== Enhancements
+* Fallbackmethod supports usage of annotations in Spring
+* Issue #1955: RecordResultPredicate can be configured in Spring Boot config now
+
+==== Bugs
+* Issue #1980: Fixed API regression following removal of io.vavr dependencies in v2.0.0
+
+=== Version 2.2.0
+
+==== Enhancements
+* Support Micronaut 4
+* Issue #1962: Added apache commons configuration based registries
+
+==== Bugs
+* Issue #2052: Support class name using SpEL expression at @Circuitbreaker name field enhancement
+* Issue #2040: ThreadPoolBulkhead always uses the "default" configuration in micronaut application bug
+* Issue #2037: Removing stale retry configurations from configuration map enhancement
+* Issue #1625: New module that collects overall information enhancement
+* Issue #1565: Do not retry if IntervalFunction returns interval less than 0
+* Issue #1865: Timelimiter always uses the "default" configuration in micronaut application
+* Issue #2038: java.lang.StackOverflowError due to infinite loop in CircuitBreakerStateMachine$OpenState.tryAcquirePermission
+
+=== Version 2.3.0
+
+==== Enhancements
+* Issue #2234: Allow passing custom Clock to CircuitBreaker without needing to use internal API.
+* Issue #2131: Added support for RxJava3 in Spring projects.
+* Issue #2029: Include `decorateSupplier` as a `Retry` instance method.
+* Issue #2246: Add handling for the case where a non-checked retry consumer is interrupted during sleep.
+* Issue #2245: Refactor `Retry#executeSuspendExecute` condition to enhance consistency with `FlowRetry`.
+* Issue #2232: Convert `Synchronized` to `ReentrantLock` to avoid virtual-thread pinning issues.
+* Issue #2241: Implement a lock-free sliding window for internal CircuitBreaker metrics.
+* Issue #2239: Add a `Clock` to `CircuitBreakerConfig` and utilize it in the state machine.
+* Issue #2200: Ignore unknown exceptions in CircuitBreaker configuration.
+* Issue #2233: Improve exception message for failure rate threshold in CircuitBreaker configuration.
+* Issue #1404: Configure exponential backoff or randomized wait duration if base configuration allows it.
+* Issue #2179: Ensure `RateLimiter.executeSuspendFunction` respects `drainPermissionsOnResult` in the configuration.
+* Issue #2152: Ensure the randomize function always returns a number greater than 1.0.
+* Issue #2130: Add support for Feign 12.5+.
+* Issue #2121: Specify required `RateLimiter` permits in annotations.
+
+==== Bugs
+
+* Issue #2243: Fixed potential memory leak in `DefaultEventConsumerRegistry`.
+* Issue #2209: Resolved issue where `CompletionStage` does not complete on user-supplied predicate failures.
+* Issue #2190: Fixed `StackOverflowError` and circular reference in CircuitBreaker configuration handling.
+* Issue #2175: Fixed validation error message for `slowCallDurationThreshold`.
+
